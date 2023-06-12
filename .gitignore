@@ -17,6 +17,7 @@
 **/models
 *.pt
 *.dat
+*.zip
 
 # Logfiles
 **/pylogfiles
