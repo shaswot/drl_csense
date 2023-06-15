@@ -20,14 +20,19 @@ modeldir_root = pathlib.Path(PROJ_ROOT_PATH / "models")
 os.makedirs(logdir_root, exist_ok=True)
 
 
-def get_logging_dir(exp_name: str):
+def get_logging_dir(exp_name: str = None):
+
+    try:
+        exp_name is not None
+    except ValueError:
+        print("Experiment name has not been specified")
 
     # Directory to save models
     models_dir = pathlib.Path(modeldir_root / exp_name)
     os.makedirs(models_dir, exist_ok=True)
     
     # Directory to save all training statistics
-    log_dir = pathlib.Path(logfolder_root / exp_name)
+    log_dir = pathlib.Path(logdir_root / exp_name)
     os.makedirs(log_dir, exist_ok=True)
 
     # Directory to save gif animations
