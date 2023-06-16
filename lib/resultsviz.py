@@ -1,4 +1,5 @@
 import os
+import pathlib
 
 import numpy as np
 import pandas as pd
@@ -34,7 +35,7 @@ def smooth_ts2xy(run_log_dir, window):
 
 
 # Training statistics and visualization
-def plot_single_run_rewards(exp_name, run_no, window):
+def plot_single_run_rewards(exp_name, run_no, window, savefig=False):
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
 
@@ -47,10 +48,14 @@ def plot_single_run_rewards(exp_name, run_no, window):
     fig = plt.figure()
     plt.xlabel("Number of Timesteps")
     plt.ylabel("Rewards")
-    plt.title(f"{exp_name}--run_{run_no} \n (moving avg window = {window})")
+    plt.title(f"{exp_name}--run_{run_no} (Training) \n (moving avg window = {window})")
     plt.plot(x, y)
+    if savefig:
+        fig_filename = f"{exp_name}--run_{run_no}--train.png"
+        fig_file = pathlib.Path(image_dir / fig_filename)
+        plt.savefig(fig_file, bbox_inches='tight')
 
-def plot_all_run_rewards(exp_name, window):
+def plot_all_run_rewards(exp_name, window, savefig=False):
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
     
@@ -68,7 +73,7 @@ def plot_all_run_rewards(exp_name, window):
     
     plt.xlabel("Number of Timesteps")
     plt.ylabel("Rewards")
-    plt.title(f"{exp_name} \n Smoothing window = {window})")
+    plt.title(f"{exp_name} (Training) \n Smoothing window = {window})")
     
     for run_no in run_nos:
         # Load data from csv files
@@ -77,6 +82,11 @@ def plot_all_run_rewards(exp_name, window):
         x, y = smooth_ts2xy(run_log_dir, window)
         plt.plot(x,y, label=f"run_{run_no}",linewidth=0.5)
     plt.legend()
+
+    if savefig:
+        fig_filename = f"{exp_name}--all_runs--train.png"
+        fig_file = pathlib.Path(image_dir / fig_filename)
+        plt.savefig(fig_file, bbox_inches='tight')
     
 
     
@@ -139,7 +149,10 @@ def get_statistics_of_all_run_rewards(exp_name, window):
 
     return x, y_avg, y_std, y_min, y_max, NO_OF_RUNS
 
-def plot_all_run_average_rewards(exp_name, window, err_type="std"):
+def plot_all_run_average_rewards(exp_name, window, err_type="std", color="red", savefig=False):
+    # Get directories
+    models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
+    
     x, y_avg, y_std, y_min, y_max, NO_OF_RUNS = get_statistics_of_all_run_rewards(exp_name, window)
 
     # Plotting
@@ -157,34 +170,45 @@ def plot_all_run_average_rewards(exp_name, window, err_type="std"):
 
     plt.xlabel("Number of Timesteps")
     plt.ylabel("Rewards")
-    plt.title(f"{exp_name} \n (Average over {NO_OF_RUNS} runs; Smoothing window = {window})")
+    plt.title(f"{exp_name} (Training)\n (Average over {NO_OF_RUNS} runs; Smoothing window = {window}; Err={err_type})")
         
     plt.plot(x, y_avg, 
-             'r-', 
+             color=color,
+             linetype="-",
              label=f"Avg, smoothing={window} ",
             linewidth=0.5)  # Average line
 
     
     plt.fill_between(x,
                      error_lims[0], error_lims[1], 
-                     color='gray', 
-                     alpha=0.3, 
+                     color=color, 
+                     alpha=0.2, 
                      label=err_type,
                     linewidth=0.05)  # Shaded standard deviation
+    if savefig:
+        fig_filename = f"{exp_name}--all_runs_avg--train.png"
+        fig_file = pathlib.Path(image_dir / fig_filename)
+        plt.savefig(fig_file, bbox_inches='tight')
+
+# Evaluation statistics and visualization
+def eval_single_run(# model_params
+                    exp_name, 
+                    run_no, 
+                    model_type,
+                    algorithm,
+                    # env_params
+                    n_envs, 
+                    seed, 
+                    sparsity, 
+                    # eval_params
+                    NUM_EPISODES):
+
+    # Get env_id and sparsity
+    env_id, exp_tag = exp_name.split("--")
+        
+    # Create environment
+    trial_env = make_trial_env(env_id, n_envs, seed, sparsity)
     
-    # plt.legend()
-    plt.show()
-    
-
-
-
-
-
-
-
-# Evaluations statistics and visualization
-def eval_single_run(trial_env, algorithm, exp_name, run_no, seed, model_type, NUM_EPISODES):
-
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
        
@@ -207,8 +231,19 @@ def eval_single_run(trial_env, algorithm, exp_name, run_no, seed, model_type, NU
     return mean_reward, std_reward
 
 
-def eval_all_run(trial_env, algorithm, exp_name, seed, model_type, NUM_EPISODES):
 
+
+def eval_all_run(# model_params
+                exp_name, 
+                model_type,
+                algorithm,
+                # env_params
+                n_envs, 
+                seed, 
+                sparsity, 
+                # eval_params
+                NUM_EPISODES):
+    
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
     
@@ -223,13 +258,17 @@ def eval_all_run(trial_env, algorithm, exp_name, seed, model_type, NUM_EPISODES)
     eval_results = {}
     for run_no in run_nos:
         eval_results[f"run_{run_no}"] = {}
-        mean_reward, std_reward = eval_single_run(trial_env=trial_env,
-                                                algorithm=algorithm,
-                                                exp_name=exp_name, 
-                                                run_no=run_no,
-                                                seed=seed,
-                                                model_type=model_type,
-                                                NUM_EPISODES=NUM_EPISODES)
+        mean_reward, std_reward = eval_single_run(# model_params
+                                                    exp_name, 
+                                                    run_no, 
+                                                    model_type, 
+                                                    # env_params
+                                                    n_envs, 
+                                                    seed, 
+                                                    sparsity, 
+                                                    algorithm,
+                                                    # eval_params
+                                                    NUM_EPISODES)
         
         eval_results[f"run_{run_no}"]["avg"] = mean_reward
         eval_results[f"run_{run_no}"]["std"] = std_reward
@@ -240,44 +279,84 @@ def eval_all_run(trial_env, algorithm, exp_name, seed, model_type, NUM_EPISODES)
         
     return df
 
-def plot_eval_all_run(trial_env, algorithm, exp_name, seed, model_type, NUM_EPISODES):
+def plot_eval_all_run(# model_params
+                        exp_name, 
+                        model_type,
+                        algorithm,
+                        # env_params
+                        n_envs, 
+                        seed, 
+                        sparsity, 
+                        # eval_params
+                        NUM_EPISODES, 
+                        # fig params
+                        savefig=False):
+            
+            df = eval_all_run(# model_params
+                                exp_name, 
+                                model_type, 
+                                # env_params
+                                n_envs, 
+                                seed, 
+                                sparsity, 
+                                algorithm,
+                                # eval_params
+                                NUM_EPISODES)
+                            
+            global_avg = np.mean(df["avg"])
+            global_std = np.std(df["avg"])
+        
+            # Plotting
+            fig_width = 7
+            fig_height = 5
+            fig = plt.figure(figsize=[fig_width,fig_height])
+                                
+            plt.bar(x=df.index,height=df["avg"], yerr=df["std"], capsize=5)
+        
+            plt.xlabel("Run")
+            plt.ylabel("Average")
+            plt.title(f"{exp_name} (Evaluation on env with SR={sparsity}) \nAverage over all runs: {global_avg:0.2f} \u00B1 {global_std:0.2f} (Using {model_type} model)")
+            if savefig:
+                fig_filename = f"{exp_name}--run_{run_no}--eval_{model_type}-SR_{sparsity}.png"
+                fig_file = pathlib.Path(image_dir / fig_filename)
+                plt.savefig(fig_file, bbox_inches='tight')
+        
+        
+
+
+def generate_frames(trial_env, model, duration=10, fps=120):
+    no_of_frames = duration*fps*2 #only every other frame is used for animation
     
-    df = eval_all_run(trial_env,
-                    algorithm,
-                    exp_name, 
-                    seed,
-                    model_type,
-                    NUM_EPISODES
-                    )
-    global_avg = np.mean(df["avg"])
-    global_std = np.std(df["avg"])
-
-    # Plotting
-    fig_width = 7
-    fig_height = 5
-    fig = plt.figure(figsize=[fig_width,fig_height])
-                        
-    plt.bar(x=df.index,height=df["avg"], yerr=df["std"], capsize=5, color="blue")
-    if model_type == "best":
-        plt.xlabel("Run (using best model)")
-    else:
-        plt.xlabel("Run (using last model)")
-    plt.ylabel("Average")
-    plt.title(f"{exp_name}\nAverage over all runs: {global_avg:0.2f} \u00B1 {global_std:0.2f}")
-    plt.show()
-
-
-
-def generate_gif_single_run(exp_name, algorithm, run_no, seed, model_type="best", duration=10, fps=480):
+    images = []
+    obss = []
+    obs = trial_env.reset()
+    img = trial_env.render(mode="rgb_array")
+    for i in range(no_of_frames):
+        images.append(img)
+        obss.append(obs[0,:,:,-1])
+        action, _ = model.predict(obs)
+        obs, reward, done, info = trial_env.step(action)
+        img = trial_env.render(mode="rgb_array")
+    return obss, images
+    
+    
+def generate_gif_single_run(# model_params
+                                exp_name,
+                                run_no,
+                                model_type, 
+                                algorithm,
+                            # env params
+                                seed,  
+                                sparsity,
+                            # anim params
+                                duration=5, 
+                                fps=120):
+    
+    # Get env_id and sparsity
+    env_id, exp_tag = exp_name.split("--")
+                                                                     
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
-
-    # exp_name = f"{env_id}--{exp_tag}"
-    env_id, exp_tag = exp_name.split("--")
-    if exp_tag == "vanilla":
-        sparsity = 0.0
-    else:
-        sparsity = float(exp_tag.split('_')[-1])
 
     # Make trial environment
     trial_env = make_trial_env(env_id=env_id,
@@ -292,31 +371,20 @@ def generate_gif_single_run(exp_name, algorithm, run_no, seed, model_type="best"
         model_file = f"{models_dir}/{exp_name}-run_{run_no}"
     model = algorithm.load(model_file)
 
-    # Create animation
-    # duration = 10 #sec
-    # fps = 240 #fps
-    no_of_frames = duration*fps*2 #only every other frame is used for animation
-    
-    images = []
-    obss = []
-    obs = trial_env.reset()
-    img = trial_env.render(mode="rgb_array")
-    for i in range(no_of_frames):
-        images.append(img)
-        obss.append(obs[0,:,:,-1])
-        action, _ = model.predict(obs)
-        obs, reward, done, info = trial_env.step(action)
-        img = trial_env.render(mode="rgb_array")
-    
+    # Generate frames    
+    obss, images = generate_frames(trial_env, model, duration, fps)
+        
     # Convert frames to animation
-    gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--img.gif"
-    imageio.mimsave(gif_file, 
+    img_gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--eval_{model_type}-SR_{sparsity}--img.gif"
+    imageio.mimsave(img_gif_file, 
                     [np.array(img) for i, img in enumerate(images) if i%2 == 0], duration=duration)
 
     # Convert obss to animation
-    gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--obs.gif"
-    imageio.mimsave(gif_file, 
+    obs_gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--eval_{model_type}-SR_{sparsity}--obs.gif"
+    imageio.mimsave(obs_gif_file, 
                     [np.array(obs) for i, obs in enumerate(obss) if i%2 == 0], duration=duration)
+
+    return obs_gif_file, img_gif_file
 
 
     

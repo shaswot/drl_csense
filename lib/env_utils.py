@@ -67,6 +67,12 @@ class SparseView(gym.ObservationWrapper[np.ndarray, int, np.ndarray]):
         sparse_frame = mask * frame
         # return sparse_frame
         return np.flipud(sparse_frame)
+        
+class UpsideDown(gym.ObservationWrapper[np.ndarray, int, np.ndarray]):
+    def __init__(self, env: gym.Env) -> None:
+        super().__init__(env)
+    def observation(self, frame: np.ndarray) -> np.ndarray:
+        return np.flipud(frame)
 
 class MyAtariWrapper(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
     """
@@ -125,6 +131,8 @@ class MyAtariWrapper(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         env = WarpFrame(env, width=screen_size, height=screen_size)
         if sparsity > 0.0:
             env = SparseView(env, sparsity=sparsity)
+        elif sparsity == 0.0:
+            env = UpsideDown(env)
         if clip_reward:
             env = ClipRewardEnv(env)
 

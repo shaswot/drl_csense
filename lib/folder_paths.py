@@ -41,7 +41,7 @@ def get_logging_dir(exp_name: str = None):
 
     # Directory to save images
     image_dir = pathlib.Path(log_dir / "images" )
-    os.makedirs(gif_dir, exist_ok=True)
+    os.makedirs(image_dir, exist_ok=True)
 
     return models_dir, log_dir, gif_dir, image_dir
 
