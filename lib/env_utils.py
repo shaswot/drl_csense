@@ -139,6 +139,25 @@ class MyAtariWrapper(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         super().__init__(env)
 
 
+
+class FrameSampling(gym.ObservationWrapper[np.ndarray, int, np.ndarray]):
+    def __init__(self, env: gym.Env, sample_ratio: float) -> None:
+        super().__init__(env)
+        self.sample_ratio = sample_ratio
+    def observation(self, frame: np.ndarray) -> np.ndarray:
+        mask = self.np_random.choice(a=[False, True], size=frame.shape, p=[self.sample_ratio, 1.0-self.sample_ratio])
+        sampled_frame = mask * frame
+        return sampled_frame
+
+class CompressFrame():
+    def __init__(self, env: gym.Env, compress_ratio: float) -> None:
+        super().__init__(env)
+        self.compress_ratio = compress_ratio
+    
+    def observation(self, frame: np.ndarray) -> np.ndarray:
+        return compress_frame(frame, self.compress_ratio)
+    
+
 def make_my_atari_env(
     env_id: Union[str, Callable[..., gym.Env]],
     n_envs: int = 1,
@@ -182,6 +201,7 @@ def make_my_atari_env(
         monitor_kwargs=monitor_kwargs,
         wrapper_kwargs=wrapper_kwargs,
     )
+
 
 def make_trial_env(env_id, n_envs, seed, sparsity):
                     
