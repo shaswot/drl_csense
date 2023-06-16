@@ -3,12 +3,15 @@ import os
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
+import imageio
 
 from stable_baselines3.common.results_plotter import load_results, ts2xy
+from stable_baselines3.common.evaluation import evaluate_policy
 
 from .folder_paths import get_logging_dir
+from .env_utils import make_trial_env
 
-
+# Helper Functions
 def moving_average(values, window):
     """
     Smooth values by doing a moving average
@@ -29,6 +32,8 @@ def smooth_ts2xy(run_log_dir, window):
     return x,y
     
 
+
+# Training statistics and visualization
 def plot_single_run_rewards(exp_name, run_no, window):
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
@@ -172,8 +177,146 @@ def plot_all_run_average_rewards(exp_name, window, err_type="std"):
     
 
 
-def gif_anim(exp_name, run_no, 
-             model_type="best", # "last"
-             anim_type="render", # # "wrapped_obs"
-            ):
+
+
+
+
+
+# Evaluations statistics and visualization
+def eval_single_run(trial_env, algorithm, exp_name, run_no, seed, model_type, NUM_EPISODES):
+
+    # Get directories
+    models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
+       
+    # Load RL model
+    if model_type == "best":
+         model_file = f"{log_dir}/run_{run_no}/best_model.zip"
+    else:
+        model_file = f"{models_dir}/{exp_name}-run_{run_no}"
+    model = algorithm.load(model_file)
+
+    mean_reward, std_reward = evaluate_policy(model, 
+                                    trial_env, 
+                                    n_eval_episodes=NUM_EPISODES, 
+                                    deterministic=True, 
+                                    render=False, 
+                                    callback=None, 
+                                    reward_threshold=None, 
+                                    return_episode_rewards=False, 
+                                    warn=True)
+    return mean_reward, std_reward
+
+
+def eval_all_run(trial_env, algorithm, exp_name, seed, model_type, NUM_EPISODES):
+
+    # Get directories
+    models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
+    
+    # get all subfolders in log_dir
+    folder_list = [folder for folder in os.listdir(log_dir)]
+    
+    # list of folders with prefix "run"
+    runs = sorted([i for i in folder_list for j in ["run"] if j in i])
+    run_nos = [run[-1] for run in runs]
+    NO_OF_RUNS = len(runs)
+
+    eval_results = {}
+    for run_no in run_nos:
+        eval_results[f"run_{run_no}"] = {}
+        mean_reward, std_reward = eval_single_run(trial_env=trial_env,
+                                                algorithm=algorithm,
+                                                exp_name=exp_name, 
+                                                run_no=run_no,
+                                                seed=seed,
+                                                model_type=model_type,
+                                                NUM_EPISODES=NUM_EPISODES)
+        
+        eval_results[f"run_{run_no}"]["avg"] = mean_reward
+        eval_results[f"run_{run_no}"]["std"] = std_reward
+
+    # If the keys of the passed dict should be the columns of the resulting DataFrame, 
+    # pass ‘columns’ (default) Otherwise, if the keys should be rows, pass ‘index’. 
+    df = pd.DataFrame.from_dict(eval_results, orient='index')
+        
+    return df
+
+def plot_eval_all_run(trial_env, algorithm, exp_name, seed, model_type, NUM_EPISODES):
+    
+    df = eval_all_run(trial_env,
+                    algorithm,
+                    exp_name, 
+                    seed,
+                    model_type,
+                    NUM_EPISODES
+                    )
+    global_avg = np.mean(df["avg"])
+    global_std = np.std(df["avg"])
+
+    # Plotting
+    fig_width = 7
+    fig_height = 5
+    fig = plt.figure(figsize=[fig_width,fig_height])
+                        
+    plt.bar(x=df.index,height=df["avg"], yerr=df["std"], capsize=5, color="blue")
+    if model_type == "best":
+        plt.xlabel("Run (using best model)")
+    else:
+        plt.xlabel("Run (using last model)")
+    plt.ylabel("Average")
+    plt.title(f"{exp_name}\nAverage over all runs: {global_avg:0.2f} \u00B1 {global_std:0.2f}")
+    plt.show()
+
+
+
+def generate_gif_single_run(exp_name, algorithm, run_no, seed, model_type="best", duration=10, fps=480):
+    # Get directories
+    models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
+
+    # exp_name = f"{env_id}--{exp_tag}"
+    env_id, exp_tag = exp_name.split("--")
+    if exp_tag == "vanilla":
+        sparsity = 0.0
+    else:
+        sparsity = float(exp_tag.split('_')[-1])
+
+    # Make trial environment
+    trial_env = make_trial_env(env_id=env_id,
+                           n_envs=1,
+                           seed=seed,
+                           sparsity=sparsity)
+       
+    # Load RL model
+    if model_type == "best":
+         model_file = f"{log_dir}/run_{run_no}/best_model.zip"
+    else:
+        model_file = f"{models_dir}/{exp_name}-run_{run_no}"
+    model = algorithm.load(model_file)
+
+    # Create animation
+    # duration = 10 #sec
+    # fps = 240 #fps
+    no_of_frames = duration*fps*2 #only every other frame is used for animation
+    
+    images = []
+    obss = []
+    obs = trial_env.reset()
+    img = trial_env.render(mode="rgb_array")
+    for i in range(no_of_frames):
+        images.append(img)
+        obss.append(obs[0,:,:,-1])
+        action, _ = model.predict(obs)
+        obs, reward, done, info = trial_env.step(action)
+        img = trial_env.render(mode="rgb_array")
+    
+    # Convert frames to animation
+    gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--img.gif"
+    imageio.mimsave(gif_file, 
+                    [np.array(img) for i, img in enumerate(images) if i%2 == 0], duration=duration)
+
+    # Convert obss to animation
+    gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--obs.gif"
+    imageio.mimsave(gif_file, 
+                    [np.array(obs) for i, obs in enumerate(obss) if i%2 == 0], duration=duration)
+
+
     

@@ -61,9 +61,11 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
 class SparseView(gym.ObservationWrapper[np.ndarray, int, np.ndarray]):
     def __init__(self, env: gym.Env, sparsity: float) -> None:
         super().__init__(env)
+        self.sparsity = sparsity
     def observation(self, frame: np.ndarray) -> np.ndarray:
-        mask = self.np_random.choice(a=[False, True], size=frame.shape, p=[sparsity, 1.0-sparsity])
+        mask = self.np_random.choice(a=[False, True], size=frame.shape, p=[self.sparsity, 1.0-self.sparsity])
         sparse_frame = mask * frame
+        # return sparse_frame
         return np.flipud(sparse_frame)
 
 class MyAtariWrapper(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
@@ -107,7 +109,7 @@ class MyAtariWrapper(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         terminal_on_life_loss: bool = True,
         clip_reward: bool = True,
         action_repeat_probability: float = 0.0,
-        sparsity = 0.0
+        sparsity: float = 0.0
     ) -> None:
         if action_repeat_probability > 0.0:
             env = StickyActionEnv(env, action_repeat_probability)
@@ -121,7 +123,8 @@ class MyAtariWrapper(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         if "FIRE" in env.unwrapped.get_action_meanings():  # type: ignore[attr-defined]
             env = FireResetEnv(env)
         env = WarpFrame(env, width=screen_size, height=screen_size)
-        env = SparseView(env, sparsity=sparsity)
+        if sparsity > 0.0:
+            env = SparseView(env, sparsity=sparsity)
         if clip_reward:
             env = ClipRewardEnv(env)
 
@@ -139,7 +142,6 @@ def make_my_atari_env(
     vec_env_cls: Optional[Union[Type[DummyVecEnv], Type[SubprocVecEnv]]] = None,
     vec_env_kwargs: Optional[Dict[str, Any]] = None,
     monitor_kwargs: Optional[Dict[str, Any]] = None,
-    sparsity: Optional[float] = 0.0,
     ) -> VecEnv:
     """
     Create a wrapped, monitored VecEnv for Atari.
@@ -172,3 +174,13 @@ def make_my_atari_env(
         monitor_kwargs=monitor_kwargs,
         wrapper_kwargs=wrapper_kwargs,
     )
+
+def make_trial_env(env_id, n_envs, seed, sparsity):
+                    
+    trial_env = make_my_atari_env(env_id=env_id,
+                                n_envs=n_envs,
+                                seed=seed,
+                                wrapper_kwargs={'sparsity': sparsity})
+    trial_env = VecFrameStack(trial_env, n_stack=4)
+
+    return trial_env
