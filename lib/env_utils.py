@@ -129,9 +129,12 @@ class MyAtariWrapper(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
         if "FIRE" in env.unwrapped.get_action_meanings():  # type: ignore[attr-defined]
             env = FireResetEnv(env)
         env = WarpFrame(env, width=screen_size, height=screen_size)
-        if sparsity > 0.0:
+        if sparsity > 0.0: 
+            # flip upside down if trial env is not vanilla env due to bug during training
             env = SparseView(env, sparsity=sparsity)
-            # flips the image upside down by mistake :P
+        if sparsity == 0.0: 
+            # undo flip if trial env is vanilla env (╯°□°)╯︵ ┻━┻ due to bug during training
+            env = UpsideDown(env)
         if clip_reward:
             env = ClipRewardEnv(env)
 

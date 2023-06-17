@@ -227,6 +227,8 @@ def eval_single_run(# model_params
         
     # Create environment
     # when training xxx-sparse_xx agents, the frame was flipped upsidedown by mistake in MyAtariWrapper
+    
+    # When agent is vanilla, don't flip frame
     if exp_tag == "vanilla":
         # flip the image to correct orientation
         trial_env = make_trial_env_nonflipped(env_id, n_envs, seed, sparsity)
