@@ -10,7 +10,8 @@ from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.evaluation import evaluate_policy
 
 from .folder_paths import get_logging_dir
-from .env_utils import make_trial_env
+from .env_utils import make_trial_env, make_trial_env_nonflipped
+
 
 # Helper Functions
 def moving_average(values, window):
@@ -225,7 +226,12 @@ def eval_single_run(# model_params
     env_id, exp_tag = exp_name.split("--")
         
     # Create environment
-    trial_env = make_trial_env(env_id, n_envs, seed, sparsity)
+    # when training xxx-sparse_xx agents, the frame was flipped upsidedown by mistake in MyAtariWrapper
+    if exp_tag == "vanilla":
+        # flip the image to correct orientation
+        trial_env = make_trial_env_nonflipped(env_id, n_envs, seed, sparsity)
+    else:
+        trial_env = make_trial_env(env_id, n_envs, seed, sparsity)
     
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
@@ -324,6 +330,10 @@ def plot_eval_all_runs(# model_params
                 sparsity, 
                 # eval_params
                 NUM_EPISODES)
+
+    csv_filename = f"{exp_name}--eval_{model_type}-SR_{sparsity}.csv"
+    csv_file = pathlib.Path(image_dir / csv_filename)
+    df.to_csv(csv_file, sep='\t', encoding='utf-8', header='true')
                     
     global_avg = np.mean(df["avg"])
     global_std = np.std(df["avg"])
@@ -382,11 +392,22 @@ def generate_gif_single_run(# model_params
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
 
-    # Make trial environment
-    trial_env = make_trial_env(env_id=env_id,
+    # Create environment
+    # when training xxx-sparse_xx agents, the frame was flipped upsidedown by mistake in MyAtariWrapper
+    if exp_tag == "vanilla":
+        # flip the image to correct orientation
+        trial_env = make_trial_env_nonflipped(env_id=env_id,
+                                               n_envs=1,
+                                               seed=seed,
+                                               sparsity=sparsity)
+    else:
+        trial_env = make_trial_env(env_id=env_id,
                            n_envs=1,
                            seed=seed,
                            sparsity=sparsity)
+
+
+        
        
     # Load RL model
     if model_type == "best":
