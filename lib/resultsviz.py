@@ -24,6 +24,10 @@ def moving_average(values, window):
     return np.convolve(values, weights, "valid")
 
 def smooth_ts2xy(run_log_dir, window):
+    try:
+        isdir = os.path.isdir(run_log_dir)
+    except FileNotFoundError:
+        print(f"Folder does not exist: {run_log_dir}")
     x, y = ts2xy(load_results(run_log_dir), "timesteps")
     # Smooth the values
     y = moving_average(y, window)
@@ -54,6 +58,7 @@ def plot_single_run_rewards(exp_name, run_no, window, savefig=False):
         fig_filename = f"{exp_name}--run_{run_no}--train.png"
         fig_file = pathlib.Path(image_dir / fig_filename)
         plt.savefig(fig_file, bbox_inches='tight')
+    plt.close()
 
 def plot_all_run_rewards(exp_name, window, savefig=False):
     # Get directories
@@ -88,8 +93,20 @@ def plot_all_run_rewards(exp_name, window, savefig=False):
         fig_file = pathlib.Path(image_dir / fig_filename)
         plt.savefig(fig_file, bbox_inches='tight')
     
-
+    plt.close()
     
+def get_runs_in_exp_name(exp_name):
+    # Get directories
+    models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
+    
+    # get all subfolders in log_dir
+    folder_list = [folder for folder in os.listdir(log_dir)]
+    
+    # list of folders with prefix "run"
+    runs = sorted([i for i in folder_list for j in ["run"] if j in i])
+    
+    return runs
+
     
 
 def get_statistics_of_all_run_rewards(exp_name, window):
@@ -124,7 +141,7 @@ def get_statistics_of_all_run_rewards(exp_name, window):
     # combine rows with same timesteps
     # if multiple runs have rewards outputs at the same timestep, take the max
     # agg_functions = {'run_0': 'max', 'run_1': 'max', 'run_2': 'max', 'run_3': 'max' }
-    agg_functions = dict([(run_no, 'max') for run_no in runs])
+    agg_functions = dict([(run, 'max') for run in runs])
     df = df.groupby(df['x']).aggregate(agg_functions)
 
     # Interpolate the data for visualization
@@ -174,7 +191,7 @@ def plot_all_run_average_rewards(exp_name, window, err_type="std", color="red", 
         
     plt.plot(x, y_avg, 
              color=color,
-             linetype="-",
+             linestyle="-",
              label=f"Avg, smoothing={window} ",
             linewidth=0.5)  # Average line
 
@@ -186,9 +203,10 @@ def plot_all_run_average_rewards(exp_name, window, err_type="std", color="red", 
                      label=err_type,
                     linewidth=0.05)  # Shaded standard deviation
     if savefig:
-        fig_filename = f"{exp_name}--all_runs_avg--train.png"
+        fig_filename = f"{exp_name}--all_runs_avg_{err_type}--train.png"
         fig_file = pathlib.Path(image_dir / fig_filename)
         plt.savefig(fig_file, bbox_inches='tight')
+    plt.close()
 
 # Evaluation statistics and visualization
 def eval_single_run(# model_params
@@ -233,7 +251,7 @@ def eval_single_run(# model_params
 
 
 
-def eval_all_run(# model_params
+def eval_all_runs(# model_params
                 exp_name, 
                 model_type,
                 algorithm,
@@ -258,15 +276,16 @@ def eval_all_run(# model_params
     eval_results = {}
     for run_no in run_nos:
         eval_results[f"run_{run_no}"] = {}
+
         mean_reward, std_reward = eval_single_run(# model_params
                                                     exp_name, 
                                                     run_no, 
-                                                    model_type, 
+                                                    model_type,
+                                                    algorithm,
                                                     # env_params
                                                     n_envs, 
                                                     seed, 
                                                     sparsity, 
-                                                    algorithm,
                                                     # eval_params
                                                     NUM_EPISODES)
         
@@ -279,7 +298,7 @@ def eval_all_run(# model_params
         
     return df
 
-def plot_eval_all_run(# model_params
+def plot_eval_all_runs(# model_params
                         exp_name, 
                         model_type,
                         algorithm,
@@ -291,37 +310,42 @@ def plot_eval_all_run(# model_params
                         NUM_EPISODES, 
                         # fig params
                         savefig=False):
-            
-            df = eval_all_run(# model_params
-                                exp_name, 
-                                model_type, 
-                                # env_params
-                                n_envs, 
-                                seed, 
-                                sparsity, 
-                                algorithm,
-                                # eval_params
-                                NUM_EPISODES)
+
+    # Get directories
+    models_dir, log_dir, gif_dir, image_dir = get_logging_dir(exp_name)
                             
-            global_avg = np.mean(df["avg"])
-            global_std = np.std(df["avg"])
+    df = eval_all_runs(# model_params
+                exp_name, 
+                model_type,
+                algorithm,
+                # env_params
+                n_envs, 
+                seed, 
+                sparsity, 
+                # eval_params
+                NUM_EPISODES)
+                    
+    global_avg = np.mean(df["avg"])
+    global_std = np.std(df["avg"])
+
+    # Plotting
+    fig_width = 7
+    fig_height = 5
+    fig = plt.figure(figsize=[fig_width,fig_height])
+                        
+    plt.bar(x=df.index,height=df["avg"], yerr=df["std"], capsize=5)
+
+    plt.xlabel("Run")
+    plt.ylabel("Average")
+    plt.title(f"{exp_name} (Evaluation on env with SR={sparsity}) \nAverage over all runs: {global_avg:0.2f} \u00B1 {global_std:0.2f} (Using {model_type} model)")
+    if savefig:
+        fig_filename = f"{exp_name}--eval_{model_type}-SR_{sparsity}.png"
+        fig_file = pathlib.Path(image_dir / fig_filename)
+        plt.savefig(fig_file, bbox_inches='tight')
         
-            # Plotting
-            fig_width = 7
-            fig_height = 5
-            fig = plt.figure(figsize=[fig_width,fig_height])
-                                
-            plt.bar(x=df.index,height=df["avg"], yerr=df["std"], capsize=5)
-        
-            plt.xlabel("Run")
-            plt.ylabel("Average")
-            plt.title(f"{exp_name} (Evaluation on env with SR={sparsity}) \nAverage over all runs: {global_avg:0.2f} \u00B1 {global_std:0.2f} (Using {model_type} model)")
-            if savefig:
-                fig_filename = f"{exp_name}--run_{run_no}--eval_{model_type}-SR_{sparsity}.png"
-                fig_file = pathlib.Path(image_dir / fig_filename)
-                plt.savefig(fig_file, bbox_inches='tight')
-        
-        
+    plt.close()
+    print(fig_filename)
+    print("---")
 
 
 def generate_frames(trial_env, model, duration=10, fps=120):

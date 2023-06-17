@@ -30,18 +30,16 @@ def get_logging_dir(exp_name: str = None):
     # Directory to save models
     models_dir = pathlib.Path(modeldir_root / exp_name)
     os.makedirs(models_dir, exist_ok=True)
-    
     # Directory to save all training statistics
     log_dir = pathlib.Path(logdir_root / exp_name)
     os.makedirs(log_dir, exist_ok=True)
-
     # Directory to save gif animations
     gif_dir = pathlib.Path(log_dir / "gifs")
     os.makedirs(gif_dir, exist_ok=True)
-
     # Directory to save images
     image_dir = pathlib.Path(log_dir / "images" )
     os.makedirs(image_dir, exist_ok=True)
+            
 
     return models_dir, log_dir, gif_dir, image_dir
 

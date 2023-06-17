@@ -203,8 +203,10 @@ def make_my_atari_env(
     )
 
 
-def make_trial_env(env_id, n_envs, seed, sparsity):
-                    
+def make_trial_env(env_id: Union[str, Callable[..., gym.Env]], 
+                   n_envs: int = 1,
+                   seed: int = 0,
+                   sparsity: float = 0.0):
     trial_env = make_my_atari_env(env_id=env_id,
                                 n_envs=n_envs,
                                 seed=seed,
