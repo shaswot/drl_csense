@@ -51,7 +51,7 @@ import gymnasium as gym
 from stable_baselines3 import A2C
 
 from lib.folder_paths import get_exp_name_tag, deconstruct_exp_name, makeget_logging_dir
-from lib.env_utils import make_atari_env_Compressed_VecFrameStack, SaveBestModelCallback
+from lib.env_utils import AtariWrapper_NoisyFrame, AtariWrapper_Compressed, make_atari_env_Custom_VecFrameStack, SaveBestModelCallback
 from lib.vizresults import plot_single_run_rewards
 
 # Get names and tags of experiment
@@ -81,11 +81,23 @@ callback = SaveBestModelCallback(check_freq=1E4,
                                 verbose=0)
 
 # Make vector environment
-env = make_atari_env_Compressed_VecFrameStack(env_id,
-                                                n_envs=NUM_ENVS,
-                                                monitor_dir=run_log_dir,
-                                                seed=run_seed,
-                                                compress_ratio=compress_ratio)
+if exp_param_type == "compress":
+    wrapper = AtariWrapper_Compressed
+    wrapper_kwargs = {"compress_ratio":exp_param_value}
+elif exp_param_type == "noisy":
+    wrapper = AtariWrapper_NoisyFrame
+    wrapper_kwargs = {"noise":exp_param_value}
+else:
+    wrapper = AtariWrapper
+    wrapper_kwargs = None
+
+env = make_atari_env_Custom_VecFrameStack(env_id,
+                                        n_envs=NUM_ENVS,
+                                        monitor_dir=run_log_dir,
+                                        seed=run_seed,
+                                        wrapper_class=wrapper,
+                                        wrapper_kwargs = wrapper_kwargs
+                                         )
 # Create RL model
 model = A2C("CnnPolicy", env, verbose=0)
 
