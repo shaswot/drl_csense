@@ -1,3 +1,5 @@
+import os
+
 import numpy as np
 import scipy
 
@@ -10,8 +12,9 @@ from stable_baselines3.common.env_util import make_vec_env
 from stable_baselines3.common.vec_env import DummyVecEnv, VecEnv, SubprocVecEnv
 from stable_baselines3.common.atari_wrappers import StickyActionEnv, NoopResetEnv, MaxAndSkipEnv, EpisodicLifeEnv, FireResetEnv, WarpFrame, ClipRewardEnv
 from stable_baselines3.common.vec_env import VecFrameStack
-from stable_baselines3.common.callbacks import BaseCallback
 
+from stable_baselines3.common.callbacks import BaseCallback
+from stable_baselines3.common.results_plotter import load_results, ts2xy
 class SaveOnBestTrainingRewardCallback(BaseCallback):
     """
     Callback for saving a model (the check is done every ``check_freq`` steps)
@@ -60,6 +63,53 @@ class SaveOnBestTrainingRewardCallback(BaseCallback):
         return True
 
 #########################################
+class SaveBestModelCallback(BaseCallback):
+    """
+    Callback for saving a model (the check is done every ``check_freq`` steps)
+    based on the training reward (in practice, we recommend using ``EvalCallback``).
+
+    :param check_freq: (int)
+    :param log_dir: (str) Path to the folder where the model will be saved.
+      It must contains the file created by the ``Monitor`` wrapper.
+    :param verbose: (int)
+    """
+
+    def __init__(self, check_freq: int, log_dir: str, save_path: str, verbose=1):
+        super().__init__(verbose)
+        self.check_freq = check_freq
+        self.log_dir = log_dir
+        self.save_path = save_path
+        self.best_mean_reward = -np.inf
+
+    # def _init_callback(self) -> None:
+    #     # Create folder if needed
+    #     if self.save_dir is not None:
+    #         os.makedirs(self.save_dir, exist_ok=True)
+
+    def _on_step(self) -> bool:
+        if self.n_calls % self.check_freq == 0:
+
+            # Retrieve training reward
+            x, y = ts2xy(load_results(self.log_dir), "timesteps")
+            if len(x) > 0:
+                # Mean training reward over the last 100 episodes
+                mean_reward = np.mean(y[-100:])
+                if self.verbose > 0:
+                    print(f"Num timesteps: {self.num_timesteps}")
+                    print(
+                        f"Best mean reward: {self.best_mean_reward:.2f} - Last mean reward per episode: {mean_reward:.2f}"
+                    )
+
+                # New best model, you could save the agent here
+                if mean_reward > self.best_mean_reward:
+                    self.best_mean_reward = mean_reward
+                    # Example for saving best model
+                    if self.verbose > 0:
+                        print(f"Saving new best model to {self.save_path}.zip")
+                    self.model.save(self.save_path)
+
+        return True
+        
 def dct2(a):
     return scipy.fftpack.dct( scipy.fftpack.dct( a, axis=0, norm='ortho' ), axis=1, norm='ortho' )
 
@@ -214,7 +264,7 @@ def make_atari_env_Compressed(
     :param monitor_dir: Path to a folder where the monitor files will be saved.
         If None, no file will be written, however, the env will still be wrapped
         in a Monitor wrapper to provide additional information about training.
-    :param wrapper_kwargs: Optional keyword argument to pass to the ``AtariWrapper``
+    :param wrapper_kwargs: Optional keyword argument to pass to the ``AtariWrapper_Compressed``
     :param env_kwargs: Optional keyword argument to pass to the env constructor
     :param vec_env_cls: A custom ``VecEnv`` class constructor. Default: None.
     :param vec_env_kwargs: Keyword arguments to pass to the ``VecEnv`` class constructor.
@@ -237,18 +287,17 @@ def make_atari_env_Compressed(
 
 def make_atari_env_Compressed_VecFrameStack(env_id: Union[str, Callable[..., gym.Env]], 
                                            n_envs: int = 1,
+                                           monitor_dir: Optional[str] = None,
                                            seed: int = 0,
                                            compress_ratio: float = 0.0):
     env = make_atari_env_Compressed(env_id=env_id,
                                     n_envs=n_envs,
+                                    monitor_dir = monitor_dir,
                                     seed=seed,
                                     wrapper_kwargs={'compress_ratio': compress_ratio})
     env = VecFrameStack(env, n_stack=4)
 
     return env
-
-
-
 
 
 ##########################################
