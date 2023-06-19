@@ -9,8 +9,8 @@ import imageio
 from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.evaluation import evaluate_policy
 
-from .folder_paths import makeget_logging_dir
-from .env_utils import make_trial_env, make_trial_env_nonflipped
+from .folder_paths import makeget_logging_dir, get_exp_name_tag, deconstruct_exp_name
+from .env_utils import AtariWrapper_NoisyFrame, AtariWrapper_Compressed, make_atari_env_Custom_VecFrameStack
 
 
 # Helper Functions
@@ -210,37 +210,52 @@ def plot_all_run_average_rewards(exp_name, window, err_type="std", color="red", 
     plt.close()
 
 # Evaluation statistics and visualization
-def eval_single_run(# model_params
-                    exp_name, 
-                    run_no, 
-                    model_type,
-                    algorithm,
-                    # env_params
-                    n_envs, 
-                    seed, 
-                    sparsity, 
-                    # eval_params
-                    NUM_EPISODES):
 
-    # Get env_id and sparsity
-    env_id, exp_tag = exp_name.split("--")
-        
-    # Create environment
-    # when training xxx-sparse_xx agents, the frame was flipped upsidedown by mistake in MyAtariWrapper
-    
-    # When agent is vanilla, don't flip frame
-    if exp_tag == "vanilla":
-        # flip the image to correct orientation
-        trial_env = make_trial_env_nonflipped(env_id, n_envs, seed, sparsity)
-    else:
-        trial_env = make_trial_env(env_id, n_envs, seed, sparsity)
-    
+###############################################################
+def evaluate_single_run(# model_params
+                        exp_name, 
+                        run_no, 
+                        model_type,
+                        algorithm,
+                        # env_params
+                        n_envs, 
+                        seed, 
+                        eval_param_value, 
+                        # eval_params
+                        NUM_EPISODES):
+                            
+    # Get names and tags of experiment
+    env_id, exp_param_type, exp_param_value, exp_metaname = deconstruct_exp_name(exp_name)
+
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = makeget_logging_dir(exp_name)
-       
+    # Monitor Directory for evaluation run
+    eval_param_type = exp_param_type
+    eval_run_log_dir = f"{log_dir}/eval_{eval_param_type}_{eval_param_value}/eval_{run_no}"
+            
+    # Make vector environment
+    if exp_param_type == "compress":
+        wrapper = AtariWrapper_Compressed
+        wrapper_kwargs = {"compress_ratio":float(eval_param_value)}
+    elif exp_param_type == "noisy":
+        wrapper = AtariWrapper_NoisyFrame
+        wrapper_kwargs = {"noise":float(eval_param_value)}
+    else:
+        wrapper = AtariWrapper
+        wrapper_kwargs = None
+        
+    trial_env = make_atari_env_Custom_VecFrameStack(env_id=env_id,
+                                            n_envs=n_envs,
+                                            monitor_dir=eval_run_log_dir,
+                                            seed=seed,
+                                            wrapper_class=wrapper,
+                                            wrapper_kwargs=wrapper_kwargs
+                                             )
+
+      
     # Load RL model
     if model_type == "best":
-         model_file = f"{log_dir}/run_{run_no}/best_model.zip"
+        model_file = f"{models_dir}/{exp_name}-run_{run_no}-best"
     else:
         model_file = f"{models_dir}/{exp_name}-run_{run_no}"
     model = algorithm.load(model_file)
@@ -256,19 +271,19 @@ def eval_single_run(# model_params
                                     warn=True)
     return mean_reward, std_reward
 
-
-
-
-def eval_all_runs(# model_params
-                exp_name, 
-                model_type,
-                algorithm,
-                # env_params
-                n_envs, 
-                seed, 
-                sparsity, 
-                # eval_params
-                NUM_EPISODES):
+def evaluate_all_runs(# model_params
+                    exp_name, 
+                    model_type,
+                    algorithm,
+                    # env_params
+                    n_envs, 
+                    seed, 
+                    eval_param_value, 
+                    # eval_params
+                    NUM_EPISODES):
+    
+    # Get names and tags of experiment
+    env_id, exp_param_type, exp_param_value, exp_metaname = deconstruct_exp_name(exp_name)
     
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = makeget_logging_dir(exp_name)
@@ -280,31 +295,174 @@ def eval_all_runs(# model_params
     runs = sorted([i for i in folder_list for j in ["run"] if j in i])
     run_nos = [run[-1] for run in runs]
     NO_OF_RUNS = len(runs)
-
+    
     eval_results = {}
     for run_no in run_nos:
         eval_results[f"run_{run_no}"] = {}
-
-        mean_reward, std_reward = eval_single_run(# model_params
-                                                    exp_name, 
-                                                    run_no, 
-                                                    model_type,
-                                                    algorithm,
-                                                    # env_params
-                                                    n_envs, 
-                                                    seed, 
-                                                    sparsity, 
-                                                    # eval_params
-                                                    NUM_EPISODES)
+    
+        mean_reward, std_reward = evaluate_single_run(# model_params
+                                                        exp_name, 
+                                                        run_no, 
+                                                        model_type,
+                                                        algorithm,
+                                                        # env_params
+                                                        n_envs, 
+                                                        seed, 
+                                                        eval_param_value, 
+                                                        # eval_params
+                                                        NUM_EPISODES)
         
         eval_results[f"run_{run_no}"]["avg"] = mean_reward
         eval_results[f"run_{run_no}"]["std"] = std_reward
-
+    
     # If the keys of the passed dict should be the columns of the resulting DataFrame, 
     # pass ‘columns’ (default) Otherwise, if the keys should be rows, pass ‘index’. 
     df = pd.DataFrame.from_dict(eval_results, orient='index')
+            
+    # Save csv
+    eval_param_type = exp_param_type                    
+    csv_filename = f"{exp_name}--eval_{model_type}-{eval_param_type}_{eval_param_value}.csv"
+    csv_file = pathlib.Path(log_dir / csv_filename)
+    df.to_csv(csv_file, sep='\t', encoding='utf-8', header='true')
         
     return df
+
+def barplot_evaluate_all_runs(exp_name, 
+                                model_type,
+                                eval_param_value, 
+                                savefig=False):
+    
+    # Get names and tags of experiment
+    env_id, exp_param_type, exp_param_value, exp_metaname = deconstruct_exp_name(exp_name)                   
+    eval_param_type = exp_param_type
+
+    # Get directories
+    models_dir, log_dir, gif_dir, image_dir = makeget_logging_dir(exp_name)
+                            
+    csv_filename = f"{exp_name}--eval_{model_type}-{eval_param_type}_{eval_param_value}.csv"
+    csv_file = pathlib.Path(log_dir / csv_filename)
+    df = pd.read_csv(csv_file, sep='\t', encoding='utf-8')
+                    
+    global_avg = np.mean(df["avg"])
+    global_std = np.std(df["avg"])
+
+    # Plotting
+    fig_width = 7
+    fig_height = 5
+    fig = plt.figure(figsize=[fig_width,fig_height])
+                        
+    plt.bar(x=df.index,height=df["avg"], yerr=df["std"], capsize=5)
+
+    plt.xlabel("Run")
+    plt.ylabel("Average Reward")
+    plt.title(f"{exp_name} ({exp_param_type} during evaluation: {eval_param_value}) \nAverage over all runs: {global_avg:0.2f} \u00B1 {global_std:0.2f} (Using {model_type} model)")
+                                
+    
+    if savefig:
+        fig_filename = f"{exp_name}--eval_all_runs-{model_type}-{eval_param_type}_{eval_param_value}.png"
+        fig_file = pathlib.Path(image_dir / fig_filename)
+        plt.savefig(fig_file, bbox_inches='tight')
+        
+    plt.close()
+    print("---")
+                                
+###############################################################
+
+# def eval_single_run(# model_params
+#                     exp_name, 
+#                     run_no, 
+#                     model_type,
+#                     algorithm,
+#                     # env_params
+#                     n_envs, 
+#                     seed, 
+#                     sparsity, 
+#                     # eval_params
+#                     NUM_EPISODES):
+
+#     # Get env_id and sparsity
+#     env_id, exp_tag = exp_name.split("--")
+        
+#     # Create environment
+#     # when training xxx-sparse_xx agents, the frame was flipped upsidedown by mistake in MyAtariWrapper
+    
+#     # When agent is vanilla, don't flip frame
+#     if exp_tag == "vanilla":
+#         # flip the image to correct orientation
+#         trial_env = make_trial_env_nonflipped(env_id, n_envs, seed, sparsity)
+#     else:
+#         trial_env = make_trial_env(env_id, n_envs, seed, sparsity)
+    
+#     # Get directories
+#     models_dir, log_dir, gif_dir, image_dir = makeget_logging_dir(exp_name)
+       
+#     # Load RL model
+#     if model_type == "best":
+#          model_file = f"{log_dir}/run_{run_no}/best_model.zip"
+#     else:
+#         model_file = f"{models_dir}/{exp_name}-run_{run_no}"
+#     model = algorithm.load(model_file)
+
+#     mean_reward, std_reward = evaluate_policy(model, 
+#                                     trial_env, 
+#                                     n_eval_episodes=NUM_EPISODES, 
+#                                     deterministic=True, 
+#                                     render=False, 
+#                                     callback=None, 
+#                                     reward_threshold=None, 
+#                                     return_episode_rewards=False, 
+#                                     warn=True)
+#     return mean_reward, std_reward
+
+
+
+
+# def eval_all_runs(# model_params
+#                 exp_name, 
+#                 model_type,
+#                 algorithm,
+#                 # env_params
+#                 n_envs, 
+#                 seed, 
+#                 sparsity, 
+#                 # eval_params
+#                 NUM_EPISODES):
+    
+#     # Get directories
+#     models_dir, log_dir, gif_dir, image_dir = makeget_logging_dir(exp_name)
+    
+#     # get all subfolders in log_dir
+#     folder_list = [folder for folder in os.listdir(log_dir)]
+    
+#     # list of folders with prefix "run"
+#     runs = sorted([i for i in folder_list for j in ["run"] if j in i])
+#     run_nos = [run[-1] for run in runs]
+#     NO_OF_RUNS = len(runs)
+
+#     eval_results = {}
+#     for run_no in run_nos:
+#         eval_results[f"run_{run_no}"] = {}
+
+#         mean_reward, std_reward = eval_single_run(# model_params
+#                                                     exp_name, 
+#                                                     run_no, 
+#                                                     model_type,
+#                                                     algorithm,
+#                                                     # env_params
+#                                                     n_envs, 
+#                                                     seed, 
+#                                                     sparsity, 
+#                                                     # eval_params
+#                                                     NUM_EPISODES)
+        
+#         eval_results[f"run_{run_no}"]["avg"] = mean_reward
+#         eval_results[f"run_{run_no}"]["std"] = std_reward
+
+#     # If the keys of the passed dict should be the columns of the resulting DataFrame, 
+#     # pass ‘columns’ (default) Otherwise, if the keys should be rows, pass ‘index’. 
+#     df = pd.DataFrame.from_dict(eval_results, orient='index')
+        
+#     return df
 
 def plot_eval_all_runs(# model_params
                         exp_name, 
