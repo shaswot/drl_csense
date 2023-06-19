@@ -9,7 +9,7 @@ import imageio
 from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.evaluation import evaluate_policy
 
-from .folder_paths import makeget_logging_dir, get_exp_name_tag, deconstruct_exp_name
+from .folder_paths import makeget_logging_dir, deconstruct_exp_name
 from .env_utils import AtariWrapper_NoisyFrame, AtariWrapper_Compressed, make_atari_env_Custom_VecFrameStack
 
 
