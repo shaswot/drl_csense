@@ -541,37 +541,40 @@ def generate_gif_single_run(# model_params
                                 algorithm,
                             # env params
                                 seed,  
-                                sparsity,
+                                eval_param_value,
                             # anim params
                                 duration=5, 
                                 fps=120):
     
-    # Get env_id and sparsity
-    env_id, exp_tag = exp_name.split("--")
-                                                                     
+    # Get names and tags of experiment
+    env_id, exp_param_type, exp_param_value, exp_metaname = deconstruct_exp_name(exp_name)
+    
     # Get directories
     models_dir, log_dir, gif_dir, image_dir = makeget_logging_dir(exp_name)
 
-    # Create environment
-    # when training xxx-sparse_xx agents, the frame was flipped upsidedown by mistake in MyAtariWrapper
-    if exp_tag == "vanilla":
-        # flip the image to correct orientation
-        trial_env = make_trial_env_nonflipped(env_id=env_id,
-                                               n_envs=1,
-                                               seed=seed,
-                                               sparsity=sparsity)
+    # Make vector environment
+    if exp_param_type == "compress":
+        wrapper = AtariWrapper_Compressed
+        wrapper_kwargs = {"compress_ratio":float(eval_param_value)}
+    elif exp_param_type == "noisy":
+        wrapper = AtariWrapper_NoisyFrame
+        wrapper_kwargs = {"noise":float(eval_param_value)}
     else:
-        trial_env = make_trial_env(env_id=env_id,
-                           n_envs=1,
-                           seed=seed,
-                           sparsity=sparsity)
-
-
+        wrapper = AtariWrapper
+        wrapper_kwargs = None
         
+    trial_env = make_atari_env_Custom_VecFrameStack(env_id=env_id,
+                                            n_envs=1,
+                                            monitor_dir=None,
+                                            seed=161803,
+                                            wrapper_class=wrapper,
+                                            wrapper_kwargs=wrapper_kwargs
+                                             )
+     
        
     # Load RL model
     if model_type == "best":
-         model_file = f"{log_dir}/run_{run_no}/best_model.zip"
+        model_file = f"{models_dir}/{exp_name}-run_{run_no}-best"
     else:
         model_file = f"{models_dir}/{exp_name}-run_{run_no}"
     model = algorithm.load(model_file)
@@ -580,14 +583,17 @@ def generate_gif_single_run(# model_params
     obss, images = generate_frames(trial_env, model, duration, fps)
         
     # Convert frames to animation
-    img_gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--eval_{model_type}-SR_{sparsity}--img.gif"
+    eval_param_type = exp_param_type
+    img_gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--eval_{model_type}-{eval_param_type}_{eval_param_value}--img.gif"
     imageio.mimsave(img_gif_file, 
                     [np.array(img) for i, img in enumerate(images) if i%2 == 0], duration=duration)
-
+    
     # Convert obss to animation
-    obs_gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--eval_{model_type}-SR_{sparsity}--obs.gif"
+    obs_gif_file = f"{gif_dir}/{exp_name}-run_{run_no}--eval_{model_type}-{eval_param_type}_{eval_param_value}--obs.gif"
     imageio.mimsave(obs_gif_file, 
                     [np.array(obs) for i, obs in enumerate(obss) if i%2 == 0], duration=duration)
+    
+    trial_env.close()
 
     return obs_gif_file, img_gif_file
 
