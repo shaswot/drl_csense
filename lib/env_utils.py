@@ -300,6 +300,7 @@ def make_atari_env_Compressed_VecFrameStack(env_id: Union[str, Callable[..., gym
 
     return env
 ##########################################
+###########################################################################
 class NoisyWarp(gym.ObservationWrapper[np.ndarray, int, np.ndarray]):
     def __init__(self, env: gym.Env, width: int = 84, height: int = 84, noise: float = 0.0) -> None:
         super().__init__(env)
@@ -395,7 +396,7 @@ class AtariWrapper_NoisyWarp(gym.Wrapper[np.ndarray, int, np.ndarray, int]):
 
         super().__init__(env)
         
-######################################################################################
+###########################################################################
 class NoisyFrame(gym.ObservationWrapper[np.ndarray, int, np.ndarray]):
     def __init__(self, env: gym.Env, noise: float) -> None:
         super().__init__(env)
