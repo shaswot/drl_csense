@@ -10,7 +10,7 @@ from stable_baselines3.common.results_plotter import load_results, ts2xy
 from stable_baselines3.common.evaluation import evaluate_policy
 
 from .folder_paths import makeget_logging_dir, deconstruct_exp_name
-from .env_utils import AtariWrapper_NoisyFrame, AtariWrapper_Compressed, make_atari_env_Custom_VecFrameStack
+from .env_utils import AtariWrapper_NoisyWarp, AtariWrapper_NoisyFrame, AtariWrapper_Compressed, make_atari_env_Custom_VecFrameStack
 
 
 # Helper Functions
@@ -239,6 +239,9 @@ def evaluate_single_run(# model_params
         wrapper_kwargs = {"compress_ratio":float(eval_param_value)}
     elif exp_param_type == "noisy":
         wrapper = AtariWrapper_NoisyFrame
+        wrapper_kwargs = {"noise":float(eval_param_value)}
+    elif exp_param_type == "noisywarp":
+        wrapper = AtariWrapper_NoisyWarp
         wrapper_kwargs = {"noise":float(eval_param_value)}
     else:
         wrapper = AtariWrapper
@@ -558,6 +561,9 @@ def generate_gif_single_run(# model_params
         wrapper_kwargs = {"compress_ratio":float(eval_param_value)}
     elif exp_param_type == "noisy":
         wrapper = AtariWrapper_NoisyFrame
+        wrapper_kwargs = {"noise":float(eval_param_value)}
+    elif exp_param_type == "noisywarp":
+        wrapper = AtariWrapper_NoisyWarp
         wrapper_kwargs = {"noise":float(eval_param_value)}
     else:
         wrapper = AtariWrapper
